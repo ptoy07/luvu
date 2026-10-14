@@ -1,0 +1,215 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xóa ảnh để lộ ảnh bên dưới</title>
+
+    <style>
+        
+.scratch-box {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    aspect-ratio: 9 / 16;
+    margin: 0 auto;
+    overflow: hidden;
+    touch-action: none;
+}
+
+.bottom-image,
+#scratchCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.bottom-image {
+    object-fit: cover;
+}
+
+
+        .bottom-image,
+        #scratchCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .bottom-image {
+            object-fit: cover;
+        }
+
+        #scratchCanvas {
+            cursor: crosshair;
+            touch-action: none;
+        }
+    </style>
+</head>
+
+<body>
+<audio id="bgMusic" autoplay loop muted>
+    <source src="nhacnen.mp3" type="audio/mpeg">
+</audio>
+    <div class="scratch-box">
+        <!-- Ảnh phía dưới -->
+        <img
+            src="anh-duoi.jpg"
+            class="bottom-image"
+            alt="Ảnh bí mật"
+        >
+
+        <!-- Ảnh phía trên sẽ bị xóa -->
+        <canvas id="scratchCanvas"></canvas>
+    </div>
+<script>
+</script>
+<script>
+    document.addEventListener("pointerdown", () => {
+    const audio = document.getElementById("bgMusic");
+
+    audio.muted = false;
+    audio.volume = 1;
+
+    audio.play()
+        .then(() => console.log("Đang phát"))
+        .catch(err => console.log("Lỗi phát:", err));
+
+}, { once: true });
+
+const topImage = new Image();
+topImage.src = "anh-tren.jpg";
+const canvas = document.getElementById("scratchCanvas");
+const ctx = canvas.getContext("2d");
+const box = document.querySelector(".scratch-box");
+
+let isDrawing = false;
+let lastX = 0;
+let lastY = 0;
+
+const brushRadius = 60;
+const spacing = 6;
+
+// Vẽ ảnh trên, giữ nguyên tỉ lệ và cắt phần thừa
+function drawImage() {
+    const rect = box.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+
+    canvas.style.width = rect.width + "px";
+    canvas.style.height = rect.height + "px";
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    const scale = Math.max(
+        rect.width / topImage.naturalWidth,
+        rect.height / topImage.naturalHeight
+    );
+
+    const sw = rect.width / scale;
+    const sh = rect.height / scale;
+    const sx = (topImage.naturalWidth - sw) / 2;
+    const sy = (topImage.naturalHeight - sh) / 2;
+
+    ctx.drawImage(
+        topImage,
+        sx, sy, sw, sh,
+        0, 0, rect.width, rect.height
+    );
+}
+
+// Brush xóa có viền blur
+function erase(x, y) {
+    ctx.globalCompositeOperation = "destination-out";
+
+    const gradient = ctx.createRadialGradient(
+        x, y, 0,
+        x, y, brushRadius
+    );
+
+  gradient.addColorStop(0, "rgba(0,0,0,0.8)");
+gradient.addColorStop(0.5, "rgba(0,0,0,0.4)");
+gradient.addColorStop(1, "rgba(0,0,0,0)");
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, brushRadius, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+// Tọa độ chuột theo kích thước hiển thị của canvas
+function getPosition(e) {
+    const rect = canvas.getBoundingClientRect();
+
+    return {
+        x: (e.clientX - rect.left) * canvas.clientWidth / rect.width,
+        y: (e.clientY - rect.top) * canvas.clientHeight / rect.height
+    };
+}
+
+// Bắt đầu xóa
+canvas.addEventListener("pointerdown", function(e) {
+    e.preventDefault();
+    isDrawing = true;
+    canvas.setPointerCapture(e.pointerId);
+
+    const pos = getPosition(e);
+    lastX = pos.x;
+    lastY = pos.y;
+
+    erase(lastX, lastY);
+});
+// Di chuyển chuột/ngón tay để xóa
+canvas.addEventListener("pointermove", function(e) {
+    if (!isDrawing) return;
+    e.preventDefault();
+
+    const pos = getPosition(e);
+    const x = pos.x;
+    const y = pos.y;
+
+    const distance = Math.hypot(x - lastX, y - lastY);
+    const steps = Math.max(1, Math.ceil(distance / spacing));
+
+    for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+
+        const pointX = lastX + (x - lastX) * t;
+        const pointY = lastY + (y - lastY) * t;
+
+        erase(pointX, pointY);
+    }
+
+    lastX = x;
+    lastY = y;
+});
+
+// Kết thúc thao tác
+function stopDrawing() {
+    isDrawing = false;
+}
+
+canvas.addEventListener("pointerup", stopDrawing);
+canvas.addEventListener("pointercancel", stopDrawing);
+canvas.addEventListener("lostpointercapture", stopDrawing);
+
+// Chỉ vẽ khi ảnh đã tải xong
+topImage.onload = drawImage;
+
+topImage.onerror = function() {
+    console.error("Không tải được ảnh trên:", topImage.src);
+};
+
+// Lưu ý: vẽ lại khi resize sẽ làm mất phần đã xóa
+window.addEventListener("resize", drawImage);
+</script>
+</body>
+</html>
